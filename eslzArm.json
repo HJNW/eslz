@@ -5,38 +5,6 @@
         "singlePlatformSubscriptionId": {
             "type": "string",
             "defaultValue": "Contoso"
-        },
-        "location": {
-            "type": "string",
-            "defaultValue": "Contoso"
-        },
-        "accountType": {
-            "type": "string",
-            "defaultValue": "Contoso"
-        },
-        "kind": {
-            "type": "string",
-            "defaultValue": "Contoso"
-        },
-        "accessTier": {
-            "type": "string",
-            "defaultValue": "Contoso"
-        },
-        "minimumTlsVersion": {
-            "type": "string",
-            "defaultValue": "Contoso"
-        },
-        "supportsHttpsTrafficOnly": {
-            "type": "bool",
-            "defaultValue": true
-        },
-        "allowBlobPublicAccess": {
-            "type": "bool",
-            "defaultValue": true
-        },
-        "allowSharedKeyAccess": {
-            "type": "bool",
-            "defaultValue": true
         }
     },
     "variables": {
