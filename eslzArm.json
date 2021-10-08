@@ -1,34 +1,43 @@
 {
-    "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+    "$schema": "https://schema.management.azure.com/schemas/2019-08-01/tenantDeploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
-        "singlePlatformSubscriptionId": {
+        "mgPrefix": {
             "type": "string",
-            "defaultValue": "Contoso"
+            "metadata": {
+                "description": "Provide prefix for the management group structure."
+            }
         }
     },
     "variables": {
-        "storageAccountName": "[concat(uniqueString(subscription().subscriptionId), 'storage')]"
+        "mgName": "[concat(parameters('mgPrefix'), '-', 'mg')]",
+        "subMgName": "[concat(parameters('mgPrefix'), '-', 'mg-child')]"
+
     },
     "resources": [
         {
-            "name": "[variables('storageAccountName')]",
-            "type": "Microsoft.Storage/storageAccounts",
-            "apiVersion": "2019-06-01",
-            "location": "[parameters('location')]",
+            // Create top level management group under tenant root
+            "type": "Microsoft.Management/managementGroups",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('mgName')]",
+            "properties": {}
+        },
+        {
+            // Create management group for platform management groups
+            "type": "Microsoft.Management/managementGroups",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('subMgName')]",
+            "dependsOn": [
+                "[tenantResourceId('Microsoft.Management/managementGroups/', variables('mgName'))]"
+            ],
             "properties": {
-                "accessTier": "[parameters('accessTier')]",
-                "minimumTlsVersion": "[parameters('minimumTlsVersion')]",
-                "supportsHttpsTrafficOnly": "[parameters('supportsHttpsTrafficOnly')]",
-                "allowBlobPublicAccess": "[parameters('allowBlobPublicAccess')]",
-                "allowSharedKeyAccess": "[parameters('allowSharedKeyAccess')]"
-            },
-            "dependsOn": [],
-            "sku": {
-                "name": "[parameters('accountType')]"
-            },
-            "kind": "[parameters('kind')]",
-            "tags": {}
+                "displayName": "[variables('subMgName')]",
+                "details": {
+                    "parent": {
+                    "id": "[tenantResourceId('Microsoft.Management/managementGroups/', variables('mgName'))]"
+                    }
+                }
+            }
         }
     ],
     "outputs": {}
