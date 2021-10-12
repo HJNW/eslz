@@ -10,8 +10,9 @@
         }
     },
     "variables": {
-        "mgName": "[concat(parameters('mgPrefix'), '-', 'mg')]",
-        "subMgName": "[concat(parameters('mgPrefix'), '-', 'mg-child')]"
+        "mgName": "[concat(parameters('mgPrefix'), '-')]",
+        "platformMgName": "[concat(parameters('mgPrefix'), '-', 'platform')]",
+        "lzMgName": "[concat(parameters('mgPrefix'), '-', 'landingzones')]"
 
     },
     "resources": [
@@ -26,12 +27,29 @@
             // Create management group for platform management groups
             "type": "Microsoft.Management/managementGroups",
             "apiVersion": "2020-05-01",
-            "name": "[variables('subMgName')]",
+            "name": "[variables('platformMgName')]",
             "dependsOn": [
                 "[tenantResourceId('Microsoft.Management/managementGroups/', variables('mgName'))]"
             ],
             "properties": {
-                "displayName": "[variables('subMgName')]",
+                "displayName": "[variables('platformMgName')]",
+                "details": {
+                    "parent": {
+                    "id": "[tenantResourceId('Microsoft.Management/managementGroups/', variables('mgName'))]"
+                    }
+                }
+            }
+        },
+        {
+            // Create management group for platform management groups
+            "type": "Microsoft.Management/managementGroups",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('lzMgName')]",
+            "dependsOn": [
+                "[tenantResourceId('Microsoft.Management/managementGroups/', variables('mgName'))]"
+            ],
+            "properties": {
+                "displayName": "[variables('lzMgName')]",
                 "details": {
                     "parent": {
                     "id": "[tenantResourceId('Microsoft.Management/managementGroups/', variables('mgName'))]"
