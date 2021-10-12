@@ -10,7 +10,7 @@
         }
     },
     "variables": {
-        "mgName": "parameters('mgPrefix')",
+        "mgName": "[parameters('mgPrefix')]",
         "platformMgName": "[concat(parameters('mgPrefix'), '-', 'platform')]",
         "lzMgName": "[concat(parameters('mgPrefix'), '-', 'landingzones')]"
 
