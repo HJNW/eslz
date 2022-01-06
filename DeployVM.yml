@@ -1,0 +1,188 @@
+## Deploy Azure VM 
+
+trigger:
+- none
+
+parameters:
+- name: serviceConnection
+  displayName: Service Connection
+  type: string
+  default: "EHC-DEV"
+
+- name: subscription
+  displayName: Azure Subscription
+  type: string
+  default: "NNIT-EHC-DEV"
+
+- name: instanceId
+  displayName: Process Instance ID
+  type: string
+
+
+jobs:
+
+# Get Parameters
+- template: templates/GetParameters.yml
+
+  parameters:
+    "instanceID": "${{parameters.instanceId}}"
+    "params": "placeholder"
+
+
+- job: deploy
+  displayName: "Deploy Azure VM"
+  dependsOn: ["getParams"]
+
+  variables:
+    - group: cloudAgentInfo
+    - group: cmpKeyVault
+    - name: vmName
+      value: $[ dependencies.getParams.outputs['output.server_vmName'] ]
+    - name: location
+      value: $[ dependencies.getParams.outputs['output.server_location'] ]
+    - name: resourceGroup
+      value: $[ dependencies.getParams.outputs['output.server_resourceGroup'] ]
+    - name: networkRG
+      value: $[ dependencies.getParams.outputs['output.server_networkRG'] ]
+    - name: network
+      value: $[ dependencies.getParams.outputs['output.server_network'] ]
+    - name: subnet
+      value: $[ dependencies.getParams.outputs['output.server_subnet'] ]
+    - name: vmSize
+      value: $[ dependencies.getParams.outputs['output.server_vmSize'] ]
+    - name: osImage
+      value: $[ dependencies.getParams.outputs['output.server_osImage'] ]
+    - name: diskType
+      value: $[ dependencies.getParams.outputs['output.server_diskType'] ]
+    - name: customerId
+      value: $[ dependencies.getParams.outputs['output.server_customerId'] ]
+
+  pool: 
+    name: $(agentPoolName)
+
+  steps:  
+  - template: templates/GetSubscription.yml
+    parameters:
+      serviceConnection: ${{parameters.serviceConnection}}
+      subscription: ${{parameters.subscription}}
+
+  - task: AzureCLI@2
+    displayName: "Create NIC"
+    name: createNic
+    inputs:
+      azureSubscription: '${{parameters.serviceConnection}}'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        resourceGroup=$(resourceGroup)
+        nicName=$(vmName)_NIC
+        netRG=$(networkRG)
+        vNet=$(network)
+        subnet=$(subnet)
+        diskType=$(subnet)
+
+        az account set --subscription $(subId)
+
+        subnetId=$(az network vnet subnet show -g $netRG -n $subnet --vnet-name $vNet --query id -o tsv)
+        az network nic create -g $resourceGroup -n $nicName --subnet $subnetId
+
+
+  # get WindowsOsPassword from KeyVault
+  - template: templates/GetSecrets.yml
+    parameters:
+      serviceConnection: ${{parameters.serviceConnection}}
+      subscription: $(cmpSubscriptionName)
+      customer: $(customerId)
+      vaultName: $(cmpKeyVault)
+
+
+  - task: AzureCLI@2
+    displayName: "Deploy VM"
+    name: dodeploy
+    inputs:
+      azureSubscription: '${{parameters.serviceConnection}}'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        vmName=$(vmName)
+        location=$(location)
+        resourceGroup=$(resourceGroup)
+        nicName=$(vmName)_NIC
+        vmSize=$(vmSize) 
+        diskType=$(diskType)
+        osImage=$(osImage)
+        configFile='config/$(customerId).txt'
+
+        if [ -f $configFile ]; then
+          source $configFile
+        fi
+        username=$WindowsOsUsername
+        password='$(WindowsOsPassword)'
+
+        #echo $username, $password
+        
+        az account set --subscription $(subId)
+
+        az vm create \
+        	--location $location \
+        	--resource-group $resourceGroup \
+        	--name $vmName \
+        	--image $osImage \
+          --size $vmSize \
+          --storage-sku $diskType \
+        	--admin-username $username \
+        	--admin-password $password \
+          --nics $nicName \
+          --os-disk-name ${vmName}_OsDisk
+
+
+  - task: AzureCLI@2
+    displayName: "Get VM Info"
+    name: output
+    inputs:
+      azureSubscription: '${{parameters.serviceConnection}}'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        vmName=$(vmName)
+        resourceGroup=$(resourceGroup)
+
+        az account set --subscription $(subId)
+        
+        ipAddress=$(az network nic ip-config show \
+           -g $resourceGroup -n ipconfig1 --nic-name ${vmName}_NIC \
+           --query "privateIpAddress" -o tsv)
+
+        echo "Private IP Address: $ipAddress"
+        echo "##vso[task.setvariable variable=ipAddress;isOutput=true]$ipAddress"
+        echo "##vso[task.setvariable variable=hostname;isOutput=true]$vmName"
+
+
+- job: updateInfo
+  displayName: Update Resource Properties
+  dependsOn: ["getParams", "deploy"]
+
+  variables:
+    - group: cmp-api-info
+    - group: privateAgentInfo
+    - name: vmName
+      value: $[ dependencies.getParams.outputs['output.server_vmName'] ]
+    - name: ipAddress
+      value: $[ dependencies.deploy.outputs['output.ipAddress'] ]
+
+  pool: 
+    name: $(agentPoolName)
+    demands: agent.name -equals $(agentHostname)
+  
+  steps:
+    - template: templates/UpdateProperties.yml
+      parameters:
+        componentInstanceId: "${{parameters.instanceId}}"
+        properties: "vmName:$(vmName)|status:running|ipAddress:$(ipAddress)"
+
+
+# Update Job Status
+- template: templates/StatusJobs.yml
+  parameters:
+    "dependsOn": "updateInfo"
+
